@@ -1,58 +1,64 @@
-Architecture Documentation
-The provided diagram illustrates a cloud-based system architecture deployed on Microsoft Azure. Below is the detailed documentation for each component and its role in the system:
+### **Technical Workflow for Azure Infrastructure Architecture**
 
-1. Components Overview
-RQNS System
-Description: An external system integrated into the architecture. It sends or receives data via the primary subscription.
-Role: Acts as a source or target system for the application's data.
-2. Primary Subscription
-Description: The central subscription on Azure where the application resources are provisioned.
-Key Component:
-Load Balancer
-Distributes incoming requests evenly across services hosted in the AKS cluster.
-3. AKS Cluster
-The core of the architecture is an Azure Kubernetes Service (AKS) cluster that hosts containerized services. Key components within the AKS cluster include:
+#### **1. Ingress Traffic Flow**
+- **Public DNS**: External client requests are directed to a **Public DNS** that resolves the domain name for the application.
+- **RQNS Gateway (Subscription 1)**: The requests are received by the **Application Gateway** in Subscription 1. The Application Gateway is responsible for load balancing, TLS termination, and forwarding traffic to the internal resources.
+- **Forwarding to AKS (Subscription 2)**: The Application Gateway forwards the requests to an **Internal Load Balancer** in Subscription 2, which routes them to the **AKS Cluster**.
 
-a. Istio Service Mesh
-Description: Provides advanced traffic management, observability, and secure communication between microservices.
-Role: Manages communication between the CRD Service and the Orchestrator Service.
-b. CRD Service
-Description: A microservice deployed in the AKS cluster.
-Role: Handles specific application logic or processes related to the application's data.
-c. Orchestrator Service
-Description: A microservice responsible for coordinating workflows or managing complex tasks.
-Role: Acts as the central control point, interacting with other components like Function App and external services.
-4. Azure Services
-The architecture leverages several Azure services for enhanced functionality and security:
+---
 
-a. Service Bus
-Description: A messaging service for reliable communication between components.
-Role: Ensures decoupling and asynchronous message handling.
-b. Storage Account
-Description: Provides scalable cloud storage for data.
-Role: Stores persistent data such as logs, files, or other assets required by the application.
-c. Redis Cache
-Description: A distributed, in-memory data store for caching.
-Role: Improves application performance by reducing latency for frequently accessed data.
-d. Function App
-Description: A serverless compute service.
-Role: Executes lightweight, event-driven tasks triggered by other services or events.
-e. Azure Key Vault
-Description: A cloud service for secure storage of secrets, certificates, and keys.
-Role: Stores sensitive information like API keys, connection strings, and encryption keys.
-5. Security Layer
-a. Azure Application Insights
-Description: A monitoring tool for performance management and diagnostics.
-Role: Tracks application performance, logs, and telemetry data.
-b. Network Security Groups (NSGs)
-Description: Provides security at the network level by controlling inbound and outbound traffic.
-Role: Restricts unauthorized access to resources within the subscription.
-6. Data Flow
-External Communication: The RQNS system interacts with the primary subscription through the load balancer.
-Load Balancing: Incoming requests are distributed to microservices in the AKS cluster.
-Service Communication: The Istio Service Mesh manages the communication between the CRD Service and the Orchestrator Service.
-Integration with Azure Services:
-Messages are exchanged via the Service Bus.
-Data is cached in Redis and persisted in the Storage Account.
-Function App processes events and interacts with Azure Key Vault for secure configurations.
-Monitoring and Security: Application Insights and NSGs ensure the system is secure and performant.
+#### **2. Application Processing in AKS Cluster**
+- **Istio Service Mesh**: Requests are routed through the **Istio Service Mesh** hosted inside the AKS cluster. Istio handles service-to-service communication, traffic routing, and observability for the microservices.
+- **CRD Service**: 
+  - The request is processed by the **CRD Service**, which performs the necessary operations based on the application logic.
+  - Processed data is then enqueued into an **Azure Service Bus (Message Queue)** for further processing.
+
+---
+
+#### **3. Orchestrator Workflow**
+- **Message Processing**:  
+  The **Orchestrator Service** consumes messages from the **Service Bus** and initiates a workflow.  
+- **Workflow Execution**:  
+  - The workflow is executed step-by-step, and at each step, results are temporarily stored in **Redis Cache** for fast access and improved performance.  
+  - At the end of the workflow, the orchestrator calls the **Function App**, which aggregates and finalizes the results.  
+
+---
+
+#### **4. Data Storage**
+- **Storage Account**:  
+  - The **Function App** writes the final workflow results to an **Azure Storage Account** for long-term persistence.  
+  - This ensures that processed data is safely stored and can be accessed as needed.  
+
+---
+
+#### **5. Networking**
+- **Private Endpoints and Private DNS Zones**:  
+  - All inter-resource communication (e.g., between AKS, Service Bus, Redis, Storage Account, and Function App) is secured via **Private Endpoints**.  
+  - **Private DNS Zones** are configured to resolve private IPs for these resources, ensuring that no traffic is exposed publicly.
+
+---
+
+#### **6. Monitoring and Security**
+- **Key Vault**:  
+  - Secrets such as connection strings, API keys, and certificates are securely stored in **Azure Key Vault**, ensuring sensitive information is never exposed.
+- **Monitoring Tools**:
+  - **Azure Monitor and Application Insights**: Provide telemetry, log collection, and performance monitoring for the entire infrastructure, including AKS and other services.
+  - **Log Analytics Workspace**: Consolidates logs and diagnostic data for advanced troubleshooting and alerting.
+- **NSG (Network Security Groups)**:
+  - NSGs enforce strict traffic controls between resources, ensuring only authorized communication is allowed within the environment.
+
+---
+
+#### **End-to-End Workflow**
+1. External requests arrive at the **Application Gateway** via Public DNS in Subscription 1.
+2. Traffic is forwarded to the **AKS Cluster** (via an internal load balancer) in Subscription 2.
+3. The **Istio Service Mesh** routes requests to the **CRD Service**.
+4. The **CRD Service** processes requests and pushes them to the **Service Bus**.
+5. The **Orchestrator** consumes messages from the **Service Bus**, executes a workflow, stores intermediate results in **Redis**, and calls the **Function App** at the workflow's end.
+6. The **Function App** stores aggregated results in the **Storage Account**.
+7. All communication is handled via **Private Endpoints** and secured using **Private DNS Zones**.
+8. The environment is monitored using **Application Insights** and secured using **Key Vault** and **NSGs**.
+
+---
+
+This technical workflow ensures a secure, scalable, and highly observable Azure infrastructure. Let me know if you need further refinements!
